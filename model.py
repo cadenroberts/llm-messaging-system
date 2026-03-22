@@ -85,5 +85,5 @@ if __name__=='__main__':
                 print("[FINISH] Not sending text.\n")
             else:
                 print("[FINISH] Sending text.\n")
-                os.system('osascript send_imessage.applescript {} "{}"'.format(recent_number, replies[replies['Reply']]))
+                os.system('osascript send_imessage.osa {} "{}"'.format(recent_number, replies[replies['Reply']]))
          

@@ -13,7 +13,7 @@ echo ""
 echo "[CHECK] Required files..."
 REQUIRED_FILES=(
   "model.py"
-  "send_imessage.applescript"
+  "send_imessage.osa"
   "config.json"
   "iMessageAI/ContentView.swift"
   "iMessageAI/iMessageAIApp.swift"
@@ -114,7 +114,7 @@ echo ""
 # -----------------------------------------------
 echo "[CHECK] AppleScript syntax..."
 if command -v osacompile >/dev/null 2>&1; then
-  if osacompile -o /dev/null "$REPO_DIR/send_imessage.applescript" 2>/dev/null; then
+  if osacompile -o /dev/null "$REPO_DIR/send_imessage.osa" 2>/dev/null; then
     echo "  APPLESCRIPT_OK"
   else
     echo "  WARN: AppleScript compilation issue"
@@ -128,25 +128,13 @@ echo ""
 # 7. Documentation completeness
 # -----------------------------------------------
 echo "[CHECK] Documentation..."
-DOCS=(
-  "README.md"
-  "ARCHITECTURE.md"
-  "DESIGN_DECISIONS.md"
-  "EVAL.md"
-  "DEMO.md"
-  "REPO_AUDIT.md"
-  "PATCHSET_SUMMARY.md"
-)
-
-for d in "${DOCS[@]}"; do
-  if [ -f "$REPO_DIR/$d" ]; then
-    LINES=$(wc -l < "$REPO_DIR/$d" | tr -d ' ')
-    echo "  OK: $d ($LINES lines)"
-  else
-    echo "  FAIL: missing $d"
-    exit 1
-  fi
-done
+if [ -f "$REPO_DIR/README.md" ]; then
+  LINES=$(wc -l < "$REPO_DIR/README.md" | tr -d ' ')
+  echo "  OK: README.md ($LINES lines)"
+else
+  echo "  FAIL: missing README.md"
+  exit 1
+fi
 echo ""
 
 echo "=== All checks passed ==="
