@@ -45,14 +45,14 @@ AppleScript Automation → Messages.app
 ```
 ┌──────────────┐     ┌──────────────────┐     ┌───────────────┐
 │  chat.db     │────▶│   model.py       │────▶│  replies.json │
-│  (SQLite)    │     │  (Python daemon)  │     │  (IPC buffer) │
-│  iMessage DB │     │  - DB polling     │     └───────┬───────┘
-└──────────────┘     │  - System prompt  │             │
-                     │  - LLM inference  │             ▼
-                     │  - JSON parsing   │     ┌───────────────┐
+│  (SQLite)    │     │  (Python daemon) │     │  (IPC buffer) │
+│  iMessage DB │     │  - DB polling    │     └───────┬───────┘
+└──────────────┘     │  - System prompt │             │
+                     │  - LLM inference │             ▼
+                     │  - JSON parsing  │     ┌───────────────┐
                      └──────────────────┘     │  SwiftUI host │
-                                              │  - Reply list  │
-                     ┌──────────────────┐     │  - Config UI   │
+                                              │  - Reply list │
+                     ┌──────────────────┐     │  - Config UI  │
                      │  config.json     │     └───────┬───────┘
                      │  - Name          │             │
                      │  - Personality   │             ▼
