@@ -61,6 +61,20 @@ AppleScript Automation → Messages.app
                      └──────────────────┘     └──────────────────┘
 ```
 
+## Constraints
+
+- macOS sandboxing and Messages DB access limitations (requires Full Disk Access)
+- AppleScript latency and reliability issues (fragile string interpolation, silent failures)
+- Local LLM inference latency (~6.5s) vs real-time responsiveness expectations
+- No file locking on IPC buffer (`replies.json`) — races possible under concurrent access
+
+## Results
+
+- Reply generation in ~6.5s per cycle on Apple Silicon (Llama 3.1 8B, local inference)
+- Structured JSON output compliance achieved with ≤1 retry in typical operation
+- End-to-end pipeline from message detection to send confirmation under 10 seconds
+- Zero external API dependencies — all inference and data stays on-device
+
 ## Quick Start
 
 ```bash
