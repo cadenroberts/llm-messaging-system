@@ -14,7 +14,7 @@ Event-driven iMessage reply system for macOS. Watches the local `chat.db` SQLite
 | `iMessageAI/ContentView.swift` | UI + process orchestration: config editing, `replies.json` polling, `model.py` lifecycle |
 | `iMessageAI/Assets.xcassets/` | App icons and accent color |
 | `iMessageAI.xcodeproj/` | Xcode project |
-| `test_model.py` | Python unit tests (53): `validate_config`, `should_process`, `normalize_phone`, `atomic_write_json`, `query_db`, `gen_replies`, `_safe_rowid` |
+| `test_model.py` | Python unit tests (59): `validate_config`, `should_process`, `normalize_phone`, `atomic_write_json`, `query_db`, `gen_replies`, `_safe_rowid`, SQL integration (real SQLite) |
 | `iMessageAITests/ContentViewTests.swift` | Swift unit tests (12): `readRepliesFile` JSON parsing, fallbacks, edge cases |
 | `scripts/demo.sh` | Verification script: checks files, config, syntax, imports |
 | `scripts/open-product-bundle.sh` | Opens pre-built `.app` bundle if present |
@@ -45,7 +45,7 @@ Unit tests (requires `ollama` package):
 python3 -m unittest test_model -v
 ```
 
-Tests cover `validate_config`, `should_process`, `normalize_phone`, `atomic_write_json`, `query_db`, `gen_replies`, `_safe_rowid`.
+Tests cover `validate_config`, `should_process`, `normalize_phone`, `atomic_write_json`, `query_db`, `gen_replies`, `_safe_rowid`, and SQL integration against a real temporary SQLite database (`QUERY_LATEST`, `QUERY_SINCE` with schema matching `chat.db`).
 
 Xcode build and Swift tests:
 

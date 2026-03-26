@@ -280,6 +280,97 @@ class TestGenReplies(unittest.TestCase):
         self.assertEqual(m.chat.call_count, 5)
 
 
+class TestSQLIntegration(unittest.TestCase):
+    """Run QUERY_LATEST and QUERY_SINCE against a real temporary SQLite database."""
+
+    def setUp(self):
+        import sqlite3 as _sqlite3
+        self._tmp = tempfile.NamedTemporaryFile(suffix='.db', delete=False)
+        self._tmp.close()
+        self.db_path = self._tmp.name
+        conn = _sqlite3.connect(self.db_path)
+        conn.executescript("""
+            CREATE TABLE handle (
+                ROWID INTEGER PRIMARY KEY,
+                id TEXT NOT NULL
+            );
+            CREATE TABLE message (
+                ROWID INTEGER PRIMARY KEY,
+                handle_id INTEGER,
+                is_from_me INTEGER DEFAULT 0,
+                text TEXT,
+                date INTEGER DEFAULT 0
+            );
+            INSERT INTO handle (ROWID, id) VALUES (1, '+15551234567');
+            INSERT INTO handle (ROWID, id) VALUES (2, '+15559999999');
+            INSERT INTO message (ROWID, handle_id, is_from_me, text, date)
+                VALUES (100, 1, 0, 'Hello', 1000);
+            INSERT INTO message (ROWID, handle_id, is_from_me, text, date)
+                VALUES (101, 1, 1, 'Hi back', 1001);
+            INSERT INTO message (ROWID, handle_id, is_from_me, text, date)
+                VALUES (102, 2, 0, 'Hey there', 1002);
+            INSERT INTO message (ROWID, handle_id, is_from_me, text, date)
+                VALUES (103, NULL, 0, '', 1003);
+            INSERT INTO message (ROWID, handle_id, is_from_me, text, date)
+                VALUES (104, 1, 0, 'Latest msg', 1004);
+        """)
+        conn.close()
+
+    def tearDown(self):
+        os.unlink(self.db_path)
+
+    def test_query_latest_returns_highest_date(self):
+        from model import QUERY_LATEST
+        raw = query_db(self.db_path, QUERY_LATEST)
+        self.assertIsNotNone(raw)
+        parts = raw.split('\x1f', 3)
+        self.assertEqual(parts[0], '104')
+        self.assertEqual(parts[2], 'Latest msg')
+        self.assertEqual(parts[3], '+15551234567')
+
+    def test_query_since_filters_correctly(self):
+        from model import QUERY_SINCE
+        raw = query_db(self.db_path, QUERY_SINCE.format(hwm=_safe_rowid('100')))
+        self.assertIsNotNone(raw)
+        rows = [r for r in raw.split('\n') if r.strip()]
+        rowids = [r.split('\x1f')[0] for r in rows]
+        self.assertNotIn('100', rowids, 'should exclude hwm row')
+        self.assertNotIn('101', rowids, 'should exclude is_from_me=1')
+        self.assertNotIn('103', rowids, 'should exclude empty text')
+        self.assertIn('102', rowids)
+        self.assertIn('104', rowids)
+
+    def test_query_since_returns_sender(self):
+        from model import QUERY_SINCE
+        raw = query_db(self.db_path, QUERY_SINCE.format(hwm=_safe_rowid('101')))
+        rows = [r for r in raw.split('\n') if r.strip()]
+        for row in rows:
+            parts = row.split('\x1f', 3)
+            if parts[0] == '102':
+                self.assertEqual(parts[3], '+15559999999')
+                return
+        self.fail('ROWID 102 not found in results')
+
+    def test_query_since_null_handle(self):
+        from model import QUERY_SINCE
+        raw = query_db(self.db_path, QUERY_SINCE.format(hwm=_safe_rowid('0')))
+        rows = [r for r in raw.split('\n') if r.strip()]
+        rowids = [r.split('\x1f')[0] for r in rows]
+        self.assertNotIn('103', rowids, 'empty text row should be excluded')
+
+    def test_query_since_no_new_messages(self):
+        from model import QUERY_SINCE
+        raw = query_db(self.db_path, QUERY_SINCE.format(hwm=_safe_rowid('999')))
+        self.assertFalse(raw)
+
+    def test_query_since_order_ascending(self):
+        from model import QUERY_SINCE
+        raw = query_db(self.db_path, QUERY_SINCE.format(hwm=_safe_rowid('0')))
+        rows = [r for r in raw.split('\n') if r.strip()]
+        rowids = [int(r.split('\x1f')[0]) for r in rows]
+        self.assertEqual(rowids, sorted(rowids))
+
+
 class TestSafeRowid(unittest.TestCase):
     def test_valid_integer(self):
         self.assertEqual(_safe_rowid('12345'), '12345')
