@@ -14,7 +14,7 @@ Event-driven iMessage reply system for macOS. Watches the local `chat.db` SQLite
 | `iMessageAI/ContentView.swift` | UI + process orchestration: config editing, `replies.json` polling, `model.py` lifecycle |
 | `iMessageAI/Assets.xcassets/` | App icons and accent color |
 | `iMessageAI.xcodeproj/` | Xcode project |
-| `test_model.py` | Python unit tests (60): `validate_config`, `should_process`, `normalize_phone`, `atomic_write_json`, `query_db`, `gen_replies`, `_safe_rowid`, SQL integration (real SQLite), live Ollama integration |
+| `test_model.py` | Python unit tests (65): `validate_config`, `should_process`, `normalize_phone`, `atomic_write_json`, `query_db`, `gen_replies`, `_safe_rowid`, SQL integration (real SQLite), live Ollama integration, user setup verification (real `chat.db`) |
 | `iMessageAITests/ContentViewTests.swift` | Swift unit tests (12): `readRepliesFile` JSON parsing, fallbacks, edge cases |
 | `scripts/demo.sh` | Verification script: checks files, config, syntax, imports |
 | `scripts/open-product-bundle.sh` | Opens pre-built `.app` bundle if present |
@@ -53,6 +53,14 @@ Live Ollama integration test (requires running Ollama with `llama3.1:8b`):
 CI_LIVE_OLLAMA=1 python3 -m unittest test_model.TestLiveOllama -v
 ```
 
+User setup verification (requires macOS with Full Disk Access granted to the terminal):
+
+```bash
+USER_SETUP_TEST=1 python3 -m unittest test_model.TestUserSetup -v
+```
+
+Validates that `~/Library/Messages/chat.db` is readable, `QUERY_LATEST` and `QUERY_SINCE` return expected columns, inbound messages exist, and handle IDs are populated.
+
 Xcode build and Swift tests:
 
 ```bash
@@ -61,7 +69,7 @@ xcodebuild test -project iMessageAI.xcodeproj -scheme iMessageAI -configuration 
 
 Swift tests cover `readRepliesFile` JSON parsing: full payloads, Reply/Refresh/Ignore states, time type coercion, nested replies, missing fields, lowercase key fallback.
 
-CI runs all of the above plus live Ollama generation and FDA grant. Full end-to-end additionally requires signed-in Messages and a real incoming iMessage.
+CI runs all of the above plus live Ollama generation and FDA grant. User setup tests verify the real `chat.db`. Full end-to-end additionally requires signed-in Messages and a real incoming iMessage.
 
 ## Architecture
 

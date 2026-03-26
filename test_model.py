@@ -16,6 +16,8 @@ from model import (
     _safe_rowid,
     REQUIRED_CONFIG_KEYS,
     RESERVED_MOOD_NAMES,
+    QUERY_LATEST,
+    QUERY_SINCE,
 )
 
 VALID_CONFIG = {
@@ -384,6 +386,55 @@ class TestLiveOllama(unittest.TestCase):
         for v in result.values():
             self.assertIsInstance(v, str)
             self.assertTrue(len(v) > 0, 'reply should not be empty')
+
+
+CHAT_DB_PATH = os.path.expanduser('~/Library/Messages/chat.db')
+
+@unittest.skipUnless(
+    os.environ.get('USER_SETUP_TEST'),
+    'user setup verification (set USER_SETUP_TEST=1, requires macOS + FDA)',
+)
+class TestUserSetup(unittest.TestCase):
+    """Validate that the real macOS Messages database is accessible and
+    that QUERY_LATEST / QUERY_SINCE work against it."""
+
+    def test_chat_db_readable(self):
+        raw = query_db(CHAT_DB_PATH, 'SELECT count(*) FROM message;')
+        self.assertIsNotNone(raw, 'sqlite3 returned error -- Full Disk Access may not be granted')
+        count = int(raw.strip())
+        self.assertGreater(count, 0, 'chat.db has no messages')
+
+    def test_query_latest_returns_row(self):
+        raw = query_db(CHAT_DB_PATH, QUERY_LATEST)
+        self.assertIsNotNone(raw)
+        parts = raw.split('\x1f', 3)
+        self.assertEqual(len(parts), 4, 'QUERY_LATEST should return 4 columns')
+        self.assertTrue(parts[0].strip().isdigit(), 'ROWID should be numeric')
+
+    def test_query_since_returns_rows(self):
+        raw = query_db(CHAT_DB_PATH, QUERY_SINCE.format(hwm=_safe_rowid('0')))
+        self.assertIsNotNone(raw)
+        rows = [r for r in raw.split('\n') if r.strip()]
+        self.assertGreater(len(rows), 0, 'should have at least one inbound message')
+        for row in rows[:5]:
+            parts = row.split('\x1f', 3)
+            self.assertEqual(len(parts), 4)
+
+    def test_query_since_excludes_sent(self):
+        raw = query_db(CHAT_DB_PATH, QUERY_SINCE.format(hwm=_safe_rowid('0')))
+        self.assertIsNotNone(raw)
+        for row in raw.split('\n'):
+            row = row.strip()
+            if not row:
+                continue
+            parts = row.split('\x1f', 3)
+            self.assertEqual(parts[1].strip(), '0', 'QUERY_SINCE should only return is_from_me=0')
+
+    def test_handles_have_ids(self):
+        raw = query_db(CHAT_DB_PATH, 'SELECT id FROM handle LIMIT 5;')
+        self.assertIsNotNone(raw)
+        for line in raw.strip().split('\n'):
+            self.assertTrue(len(line.strip()) > 0, 'handle id should not be empty')
 
 
 class TestSafeRowid(unittest.TestCase):
