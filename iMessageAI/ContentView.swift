@@ -846,7 +846,7 @@ struct ContentView: View {
         }
     }
 
-    private struct ParsedReplies {
+    struct ParsedReplies {
         let sender: String
         let message: String
         let replyValue: String
@@ -854,7 +854,7 @@ struct ContentView: View {
         let repliesDict: [String: String]
     }
 
-    private static func readRepliesFile(at url: URL) -> ParsedReplies? {
+    static func readRepliesFile(at url: URL) -> ParsedReplies? {
         guard FileManager.default.fileExists(atPath: url.path) else { return nil }
         do {
             let data = try Data(contentsOf: url)

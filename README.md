@@ -14,10 +14,11 @@ Event-driven iMessage reply system for macOS. Watches the local `chat.db` SQLite
 | `iMessageAI/ContentView.swift` | UI + process orchestration: config editing, `replies.json` polling, `model.py` lifecycle |
 | `iMessageAI/Assets.xcassets/` | App icons and accent color |
 | `iMessageAI.xcodeproj/` | Xcode project |
-| `test_model.py` | Unit tests: `validate_config`, `should_process`, `normalize_phone`, `atomic_write_json` |
+| `test_model.py` | Python unit tests (53): `validate_config`, `should_process`, `normalize_phone`, `atomic_write_json`, `query_db`, `gen_replies`, `_safe_rowid` |
+| `iMessageAITests/ContentViewTests.swift` | Swift unit tests (12): `readRepliesFile` JSON parsing, fallbacks, edge cases |
 | `scripts/demo.sh` | Verification script: checks files, config, syntax, imports |
 | `scripts/open-product-bundle.sh` | Opens pre-built `.app` bundle if present |
-| `.github/workflows/ci.yml` | CI: installs deps, runs `demo.sh` and unit tests on `macos-latest` |
+| `.github/workflows/ci.yml` | CI: smoke test, Python tests, Xcode build + Swift tests on `macos-26` |
 
 ## Entry Points
 
@@ -44,13 +45,15 @@ Unit tests (requires `ollama` package):
 python3 -m unittest test_model -v
 ```
 
-Tests cover `validate_config`, `should_process`, `normalize_phone`, `atomic_write_json`.
+Tests cover `validate_config`, `should_process`, `normalize_phone`, `atomic_write_json`, `query_db`, `gen_replies`, `_safe_rowid`.
 
-Xcode build:
+Xcode build and Swift tests:
 
 ```bash
-xcodebuild -project iMessageAI.xcodeproj -scheme iMessageAI -configuration Debug build 2>&1 | tail -5
+xcodebuild test -project iMessageAI.xcodeproj -scheme iMessageAI -configuration Debug -destination 'platform=macOS'
 ```
+
+Swift tests cover `readRepliesFile` JSON parsing: full payloads, Reply/Refresh/Ignore states, time type coercion, nested replies, missing fields, lowercase key fallback.
 
 Full end-to-end requires macOS with Full Disk Access, Ollama with `llama3.1:8b`, signed-in Messages, and a real incoming iMessage.
 

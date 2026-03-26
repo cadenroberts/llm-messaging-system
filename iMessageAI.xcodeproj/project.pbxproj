@@ -6,8 +6,19 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXContainerItemProxy section */
+		CAFE0001000000000000000B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 849A61FE2EDACF7B005C91AF /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 849A62052EDACF7C005C91AF;
+			remoteInfo = iMessageAI;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		849A62062EDACF7C005C91AF /* iMessageAI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = iMessageAI.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		CAFE00010000000000000001 /* iMessageAITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = iMessageAITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -16,10 +27,22 @@
 			path = iMessageAI;
 			sourceTree = "<group>";
 		};
+		CAFE00010000000000000002 /* iMessageAITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = iMessageAITests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		849A62032EDACF7C005C91AF /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CAFE00010000000000000004 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -33,6 +56,7 @@
 			isa = PBXGroup;
 			children = (
 				849A62082EDACF7C005C91AF /* iMessageAI */,
+				CAFE00010000000000000002 /* iMessageAITests */,
 				849A62072EDACF7C005C91AF /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,6 +65,7 @@
 			isa = PBXGroup;
 			children = (
 				849A62062EDACF7C005C91AF /* iMessageAI.app */,
+				CAFE00010000000000000001 /* iMessageAITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -70,6 +95,29 @@
 			productReference = 849A62062EDACF7C005C91AF /* iMessageAI.app */;
 			productType = "com.apple.product-type.application";
 		};
+		CAFE00010000000000000006 /* iMessageAITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CAFE00010000000000000009 /* Build configuration list for PBXNativeTarget "iMessageAITests" */;
+			buildPhases = (
+				CAFE00010000000000000003 /* Sources */,
+				CAFE00010000000000000004 /* Frameworks */,
+				CAFE00010000000000000005 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				CAFE0001000000000000000A /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				CAFE00010000000000000002 /* iMessageAITests */,
+			);
+			name = iMessageAITests;
+			packageProductDependencies = (
+			);
+			productName = iMessageAITests;
+			productReference = CAFE00010000000000000001 /* iMessageAITests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -82,6 +130,10 @@
 				TargetAttributes = {
 					849A62052EDACF7C005C91AF = {
 						CreatedOnToolsVersion = 26.1.1;
+					};
+					CAFE00010000000000000006 = {
+						CreatedOnToolsVersion = 26.1.1;
+						TestTargetID = 849A62052EDACF7C005C91AF;
 					};
 				};
 			};
@@ -100,12 +152,20 @@
 			projectRoot = "";
 			targets = (
 				849A62052EDACF7C005C91AF /* iMessageAI */,
+				CAFE00010000000000000006 /* iMessageAITests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		849A62042EDACF7C005C91AF /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CAFE00010000000000000005 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -122,7 +182,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		CAFE00010000000000000003 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		CAFE0001000000000000000A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 849A62052EDACF7C005C91AF /* iMessageAI */;
+			targetProxy = CAFE0001000000000000000B /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		849A620F2EDACF7D005C91AF /* Debug */ = {
@@ -305,6 +380,46 @@
 			};
 			name = Release;
 		};
+		CAFE00010000000000000007 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 93W9C492P9;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = imessageai.iMessageAITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/iMessageAI.app/Contents/MacOS/iMessageAI";
+			};
+			name = Debug;
+		};
+		CAFE00010000000000000008 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 93W9C492P9;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = imessageai.iMessageAITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/iMessageAI.app/Contents/MacOS/iMessageAI";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -322,6 +437,15 @@
 			buildConfigurations = (
 				849A62122EDACF7D005C91AF /* Debug */,
 				849A62132EDACF7D005C91AF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CAFE00010000000000000009 /* Build configuration list for PBXNativeTarget "iMessageAITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CAFE00010000000000000007 /* Debug */,
+				CAFE00010000000000000008 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

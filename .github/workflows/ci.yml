@@ -7,10 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  # Verification only (syntax, config, imports). Full Xcode build requires
-  # macOS 26 + Xcode 26 which is not yet available on GitHub-hosted runners.
   verify:
-    runs-on: macos-latest
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
 
@@ -27,3 +25,6 @@ jobs:
 
       - name: Run unit tests
         run: python3 -m unittest test_model -v
+
+      - name: Xcode build and test
+        run: xcodebuild test -project iMessageAI.xcodeproj -scheme iMessageAI -configuration Debug -destination 'platform=macOS'

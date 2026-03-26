@@ -151,6 +151,11 @@ def atomic_write_json(filepath, data):
             pass
         raise
 
+def _safe_rowid(value):
+    if not str(value).isdigit():
+        raise ValueError(f"invalid ROWID: {value!r}")
+    return str(value)
+
 def query_db(db_path, sql):
     try:
         result = subprocess.run(
@@ -202,7 +207,7 @@ if __name__ == '__main__':
     poll_count = 0
     while not _shutdown[0]:
         try:
-            raw = query_db(path, QUERY_SINCE.format(hwm=recent_rowid))
+            raw = query_db(path, QUERY_SINCE.format(hwm=_safe_rowid(recent_rowid)))
             if not raw:
                 if poll_count % 100 == 0:
                     print("[WAITING] Fetching text with content ...\n")

@@ -3,6 +3,7 @@ import json
 import os
 import tempfile
 import unittest
+from unittest.mock import patch, MagicMock
 
 from model import (
     validate_config,
@@ -10,6 +11,9 @@ from model import (
     normalize_phone,
     _phones_match,
     atomic_write_json,
+    query_db,
+    gen_replies,
+    _safe_rowid,
     REQUIRED_CONFIG_KEYS,
     RESERVED_MOOD_NAMES,
 )
@@ -181,6 +185,122 @@ class TestAtomicWriteJson(unittest.TestCase):
         finally:
             if os.path.exists(tmp):
                 os.unlink(tmp)
+
+
+class TestQueryDb(unittest.TestCase):
+    @patch('model.subprocess.run')
+    def test_success(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=0, stdout='  123\x1f0\x1fhello\x1f+1555  \n')
+        self.assertEqual(query_db('/fake/db', 'SELECT 1;'), '123\x1f0\x1fhello\x1f+1555')
+
+    @patch('model.subprocess.run')
+    def test_empty_stdout(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=0, stdout='')
+        self.assertEqual(query_db('/fake/db', 'SELECT 1;'), '')
+
+    @patch('model.subprocess.run')
+    def test_nonzero_returncode(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=1, stderr='error msg')
+        self.assertIsNone(query_db('/fake/db', 'SELECT 1;'))
+
+    @patch('model.subprocess.run')
+    def test_nonzero_empty_stderr(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=1, stderr='')
+        self.assertIsNone(query_db('/fake/db', 'SELECT 1;'))
+
+    @patch('model.subprocess.run', side_effect=FileNotFoundError)
+    def test_sqlite3_missing(self, mock_run):
+        with self.assertRaises(SystemExit):
+            query_db('/fake/db', 'SELECT 1;')
+
+
+class TestGenReplies(unittest.TestCase):
+    def _cfg(self):
+        return dict(VALID_CONFIG)
+
+    def _mock_ollama(self):
+        import sys
+        m = MagicMock()
+        patcher = patch.dict(sys.modules, {'ollama': m})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        return m
+
+    def test_correct_response(self):
+        m = self._mock_ollama()
+        m.chat.return_value = {
+            'message': {'content': json.dumps({'Happy': 'Hey!', 'Sad': 'Meh'})}
+        }
+        result = gen_replies(self._cfg(), 'Hi')
+        self.assertEqual(result, {'Happy': 'Hey!', 'Sad': 'Meh'})
+        self.assertEqual(m.chat.call_count, 1)
+
+    def test_key_mismatch_then_success(self):
+        m = self._mock_ollama()
+        m.chat.side_effect = [
+            {'message': {'content': json.dumps({'Wrong': 'key'})}},
+            {'message': {'content': json.dumps({'Happy': 'Hey!', 'Sad': 'Meh'})}},
+        ]
+        result = gen_replies(self._cfg(), 'Hi')
+        self.assertEqual(result, {'Happy': 'Hey!', 'Sad': 'Meh'})
+        self.assertEqual(m.chat.call_count, 2)
+
+    def test_non_dict_then_success(self):
+        m = self._mock_ollama()
+        m.chat.side_effect = [
+            {'message': {'content': '"just a string"'}},
+            {'message': {'content': json.dumps({'Happy': 'Hey!', 'Sad': 'Meh'})}},
+        ]
+        result = gen_replies(self._cfg(), 'Hi')
+        self.assertEqual(result, {'Happy': 'Hey!', 'Sad': 'Meh'})
+
+    def test_non_string_values_then_success(self):
+        m = self._mock_ollama()
+        m.chat.side_effect = [
+            {'message': {'content': json.dumps({'Happy': 123, 'Sad': 'Meh'})}},
+            {'message': {'content': json.dumps({'Happy': 'Hey!', 'Sad': 'Meh'})}},
+        ]
+        result = gen_replies(self._cfg(), 'Hi')
+        self.assertEqual(result, {'Happy': 'Hey!', 'Sad': 'Meh'})
+
+    def test_exception_then_success(self):
+        m = self._mock_ollama()
+        m.chat.side_effect = [
+            RuntimeError('connection refused'),
+            {'message': {'content': json.dumps({'Happy': 'Hey!', 'Sad': 'Meh'})}},
+        ]
+        result = gen_replies(self._cfg(), 'Hi')
+        self.assertEqual(result, {'Happy': 'Hey!', 'Sad': 'Meh'})
+
+    def test_all_retries_exhausted_returns_fallback(self):
+        m = self._mock_ollama()
+        m.chat.side_effect = RuntimeError('fail')
+        result = gen_replies(self._cfg(), 'Hi')
+        self.assertEqual(result, {'Happy': '', 'Sad': ''})
+        self.assertEqual(m.chat.call_count, 5)
+
+
+class TestSafeRowid(unittest.TestCase):
+    def test_valid_integer(self):
+        self.assertEqual(_safe_rowid('12345'), '12345')
+
+    def test_valid_zero(self):
+        self.assertEqual(_safe_rowid('0'), '0')
+
+    def test_rejects_non_numeric(self):
+        with self.assertRaises(ValueError):
+            _safe_rowid('12; DROP TABLE message;')
+
+    def test_rejects_negative(self):
+        with self.assertRaises(ValueError):
+            _safe_rowid('-1')
+
+    def test_rejects_empty(self):
+        with self.assertRaises(ValueError):
+            _safe_rowid('')
+
+    def test_int_input(self):
+        self.assertEqual(_safe_rowid(42), '42')
 
 
 if __name__ == '__main__':
