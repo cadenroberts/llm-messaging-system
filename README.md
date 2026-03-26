@@ -1,6 +1,6 @@
 # iMessageAI
 
-Event-driven iMessage reply system for macOS. Watches the local `chat.db` SQLite store for incoming messages, generates mood-conditioned replies via a local Ollama LLM, presents candidates in a SwiftUI interface for human-in-the-loop selection, and sends the chosen reply through AppleScript automation.
+Poll-driven iMessage reply system for macOS. Watches the local `chat.db` SQLite store for incoming messages, generates mood-conditioned replies via a local Ollama LLM, presents candidates in a SwiftUI interface for human-in-the-loop selection, and sends the chosen reply through AppleScript automation.
 
 ## Files
 
@@ -14,7 +14,7 @@ Event-driven iMessage reply system for macOS. Watches the local `chat.db` SQLite
 | `iMessageAI/ContentView.swift` | UI + process orchestration: config editing, `replies.json` polling, `model.py` lifecycle |
 | `iMessageAI/Assets.xcassets/` | App icons and accent color |
 | `iMessageAI.xcodeproj/` | Xcode project |
-| `test_model.py` | Python unit tests (65): `validate_config`, `should_process`, `normalize_phone`, `atomic_write_json`, `query_db`, `gen_replies`, `_safe_rowid`, SQL integration (real SQLite), live Ollama integration, user setup verification (real `chat.db`) |
+| `test_model.py` | Python unit tests (65): `validate_config`, `should_process`, `normalize_phone`, `_phones_match`, `atomic_write_json`, `query_db`, `gen_replies`, `_safe_rowid`, SQL integration (real SQLite), live Ollama integration, user setup verification (real `chat.db`) |
 | `iMessageAITests/ContentViewTests.swift` | Swift unit tests (12): `readRepliesFile` JSON parsing, fallbacks, edge cases |
 | `scripts/demo.sh` | Verification script: checks files, config, syntax, imports |
 | `scripts/open-product-bundle.sh` | Opens pre-built `.app` bundle if present |
@@ -45,7 +45,7 @@ Unit tests (requires `ollama` package):
 python3 -m unittest test_model -v
 ```
 
-Tests cover `validate_config`, `should_process`, `normalize_phone`, `atomic_write_json`, `query_db`, `gen_replies`, `_safe_rowid`, and SQL integration against a real temporary SQLite database (`QUERY_LATEST`, `QUERY_SINCE` with schema matching `chat.db`).
+Tests cover `validate_config`, `should_process`, `normalize_phone`, `_phones_match`, `atomic_write_json`, `query_db`, `gen_replies`, `_safe_rowid`, and SQL integration against a real temporary SQLite database (`QUERY_LATEST`, `QUERY_SINCE` with schema matching `chat.db`).
 
 Live Ollama integration test (requires running Ollama with `llama3.1:8b`):
 
@@ -77,7 +77,9 @@ CI runs all of the above plus live Ollama generation and FDA grant. User setup t
 flowchart LR
     chatDB["chat.db (SQLite)"] -->|"sqlite3 CLI poll"| modelPy["model.py"]
     configJSON["config.json"] -->|"read each cycle"| modelPy
-    modelPy -->|"ollama.chat LLM"| repliesJSON["replies.json"]
+    modelPy -->|"ollama.chat"| ollama["Ollama (llama3.1:8b)"]
+    ollama -->|"JSON response"| modelPy
+    modelPy <-->|"atomic write + poll"| repliesJSON["replies.json"]
     repliesJSON <-->|"1s poll + atomic write"| swiftUI["SwiftUI ContentView"]
     swiftUI -->|"persistConfig"| configJSON
     swiftUI -->|"Process launch"| modelPy
@@ -90,7 +92,7 @@ flowchart LR
 1. SwiftUI host launches `model.py` as a child process (auto-restart on exit)
 2. `model.py` polls `chat.db` via `sqlite3` CLI for the latest message ROWID
 3. On new message from an allowed phone number: reads `config.json`, builds personality prompt with mood definitions
-4. Ollama generates JSON with one reply per mood (retries up to 5 times on key mismatch)
+4. Ollama generates JSON with one reply per mood (retries up to 5 times on malformed output)
 5. `model.py` atomically writes the reply map to `replies.json`
 6. SwiftUI polls `replies.json` every 1s and displays mood-labeled reply cards
 7. User selects a card, edits text if needed, then taps Reply / Refresh / Ignore
