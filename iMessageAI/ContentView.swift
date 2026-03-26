@@ -10,26 +10,22 @@ import UserNotifications
 
 #if os(macOS)
 import AppKit
-internal import System
 #endif
 
 #if os(macOS)
-private var modelScriptRelativePath: String { "model.py" }
-
 private func resolvePythonPath() -> String? {
-    // Use the project's dedicated virtual environment python
     let user = NSUserName()
     let candidates = [
+        "/Users/\(user)/iMessageAI/.venv/bin/python3",
+        "/Users/\(user)/iMessageAI/.venv/bin/python",
         "/Users/\(user)/miniconda3/bin/python",
         "/Users/\(user)/miniconda3/bin/python3",
-        "/usr/local/bin/python",
-        "/usr/local/bin/python3",
-        "/usr/bin/python",
-        "/usr/bin/python3",
         "/opt/homebrew/bin/python",
         "/opt/homebrew/bin/python3",
         "/usr/local/bin/python",
         "/usr/local/bin/python3",
+        "/usr/bin/python",
+        "/usr/bin/python3",
     ]
     for path in candidates {
         if FileManager.default.isExecutableFile(atPath: path) {
@@ -53,6 +49,18 @@ private func fixedConfigFileURL() -> URL { URL(fileURLWithPath: basePath + "/con
 private func fixedRepliesFileURL() -> URL { URL(fileURLWithPath: basePath + "/replies.json") }
 private func fixedModelScriptURL() -> URL { URL(fileURLWithPath: basePath + "/model.py") }
 
+private func withFileLock<T>(for fileURL: URL, _ body: () throws -> T) rethrows -> T {
+    let lockPath = fileURL.path + ".lock"
+    let fd = open(lockPath, O_CREAT | O_RDWR, 0o644)
+    guard fd >= 0 else { return try body() }
+    defer {
+        _ = flock(fd, LOCK_UN)
+        _ = close(fd)
+    }
+    _ = flock(fd, LOCK_EX)
+    return try body()
+}
+
 struct Mood: Identifiable, Equatable {
     let id: UUID
     var name: String
@@ -65,10 +73,12 @@ struct Mood: Identifiable, Equatable {
     }
 }
 
+private let reservedMoodNames: Set<String> = ["Reply", "reply", "sender", "message", "time", "replies"]
+
 struct ContentView: View {
     // MARK: - App Config State
-    @State private var name: String = "Caden"
-    @State private var personalDescription: String = "I am a 22 year old UCSC CSE MS student. I'm pretty casual about grammer. I love football, hanging out with friends and my girlfriend, coding, and working out!"
+    @State private var name: String = "Caden Roberts"
+    @State private var personalDescription: String = "I am a 22 year old UCSC CSE MS student. I grew up in San Jose. I'm pretty casual about grammar but I send longer, more thought out messages and sound a bit gen z. I love hanging out with friends and my girlfriend, coding, and working out! I love coding! I love working out but also enjoy my alone time."
 
     // Editing states for Name and Description
     @State private var isEditingName: Bool = false
@@ -79,9 +89,9 @@ struct ContentView: View {
 
     // Moods (1-5 max)
     @State private var moods: [Mood] = [
-        Mood(name: "Loving", description: "Very kind and happy. Not argumentative, very agreeable and happy to hangout."),
-        Mood(name: "Angry", description: "Very upset and cranky. Close to snapping if someone inconvienences me."),
-        Mood(name: "Professional", description: "Clear, concise, and formal.")
+        Mood(name: "Happy", description: "Happy and carefree. Go on and on about whatever you can."),
+        Mood(name: "Professional", description: "Polite. No slang, no casual phrasing. Sounds like a business email or a customer service agent. Gives clear acknowledgment of the message and responds with structured, direct sentences. Avoids emotional expression."),
+        Mood(name: "Sad", description: "Avoid everything and rant a lot about how pointless it is.")
     ]
     
     // Phone number filter state
@@ -90,7 +100,7 @@ struct ContentView: View {
         case exclude = "Exclude"
         var id: String { rawValue }
     }
-    @State private var phoneListMode: PhoneListMode = .include
+    @State private var phoneListMode: PhoneListMode = .exclude
     @State private var phoneNumbers: [String] = []
     @State private var newPhoneNumber: String = ""
     @State private var showAddPhoneForm: Bool = false
@@ -158,17 +168,19 @@ struct ContentView: View {
         }
 
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
-        UNUserNotificationCenter.current().add(request) { _ in }
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error = error { print("Notification delivery failed: \(error)") }
+        }
         // Remember we notified for this specific event
         DispatchQueue.main.async { self.lastNotifiedEmptyReplyID = eventID }
     }
 
     // Added helper method per instructions
     private func performRepliesWrite(_ write: () -> Void) {
-        // Temporarily pause polling to avoid racing with our own write
         stopRepliesPolling()
-        write()
-        // Resume polling after a short delay to give the other process time to settle
+        withFileLock(for: fixedRepliesFileURL()) {
+            write()
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             self.startRepliesPolling()
         }
@@ -188,17 +200,6 @@ struct ContentView: View {
             }
             .navigationTitle("iMessageAI")
             .toolbar {
-#if os(iOS)
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Toggle(isOn: $notificationsEnabled) {
-                        Text("Notifications")
-                    }
-                    .toggleStyle(.switch)
-                    .onChange(of: notificationsEnabled) { _, _ in
-                        requestNotificationAuthorizationIfNeeded()
-                    }
-                }
-#else
                 ToolbarItem(placement: .automatic) {
                     Toggle(isOn: $notificationsEnabled) {
                         Text("Notifications")
@@ -208,7 +209,6 @@ struct ContentView: View {
                         requestNotificationAuthorizationIfNeeded()
                     }
                 }
-#endif
             }
             .onChange(of: phoneListMode) { _, _ in
                 persistConfig()
@@ -422,13 +422,6 @@ struct ContentView: View {
                         .foregroundStyle(.secondary)
                     TextField("e.g. +1 (555) 123-4567", text: $newPhoneNumber)
                         .textFieldStyle(.roundedBorder)
-#if os(iOS)
-                        // iOS: disable auto-capitalization for phone input
-                        .textInputAutocapitalization(.never)
-                        .keyboardType(.phonePad)
-#else
-                        // macOS: no equivalent autocapitalization modifier; do nothing
-#endif
 
                     HStack {
                         Button("Cancel") { cancelAddPhone() }
@@ -721,6 +714,8 @@ struct ContentView: View {
         let trimmedName = newMoodName.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedDesc = newMoodDescription.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty, !trimmedDesc.isEmpty, moods.count < 5 else { return }
+        guard !reservedMoodNames.contains(trimmedName) else { return }
+        guard !moods.contains(where: { $0.name.caseInsensitiveCompare(trimmedName) == .orderedSame }) else { return }
         moods.append(Mood(name: trimmedName, description: trimmedDesc))
         persistConfig()
         cancelAddMood()
@@ -738,6 +733,8 @@ struct ContentView: View {
         let newName = draftMoodName.trimmingCharacters(in: .whitespacesAndNewlines)
         let newDesc = draftMoodDescription.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !newName.isEmpty, !newDesc.isEmpty else { return }
+        guard !reservedMoodNames.contains(newName) else { return }
+        guard !moods.contains(where: { $0.name.caseInsensitiveCompare(newName) == .orderedSame && $0.id != mood.id }) else { return }
         moods[idx].name = newName
         moods[idx].description = newDesc
         persistConfig()
@@ -772,22 +769,13 @@ struct ContentView: View {
 
     private func createPhoneNumber() {
         let trimmed = newPhoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty, !phoneNumbers.contains(trimmed) else { return }
         phoneNumbers.append(trimmed)
         persistConfig()
         cancelAddPhone()
     }
 
     private func persistConfig() {
-        // Existing UserDefaults persistence
-        UserDefaults.standard.set(name, forKey: "config.name")
-        UserDefaults.standard.set(personalDescription, forKey: "config.personalDescription")
-        let moodsPayload = moods.map { ["name": $0.name, "description": $0.description] }
-        if let data = try? JSONSerialization.data(withJSONObject: moodsPayload, options: []) {
-            UserDefaults.standard.set(data, forKey: "config.moods")
-        }
-
-        // Write a config.json alongside UserDefaults for external consumers
         struct ConfigFile: Codable {
             let name: String
             let personalDescription: String
@@ -796,7 +784,7 @@ struct ContentView: View {
             let phoneNumbers: [String]
         }
 
-        let moodsDict: [String: String] = Dictionary(uniqueKeysWithValues: moods.map { ($0.name, $0.description) })
+        let moodsDict: [String: String] = Dictionary(moods.map { ($0.name, $0.description) }, uniquingKeysWith: { _, last in last })
 
         let config = ConfigFile(
             name: name,
@@ -818,9 +806,7 @@ struct ContentView: View {
             print("Wrote config.json to: \(fileURL.path)\n")
 #endif
         } catch {
-#if DEBUG
             print("Failed to write config.json: \(error)\n")
-#endif
         }
     }
 
@@ -842,74 +828,83 @@ struct ContentView: View {
                 if let name = json["name"] as? String { self.name = name }
                 if let personalDescription = json["personalDescription"] as? String { self.personalDescription = personalDescription }
                 if let moodsDict = json["moods"] as? [String: String] {
-                    self.moods = moodsDict.map { Mood(name: $0.key, description: $0.value) }
+                    let valid = moodsDict.filter { !reservedMoodNames.contains($0.key) }
+                    if !valid.isEmpty {
+                        self.moods = valid.sorted(by: { $0.key < $1.key }).map { Mood(name: $0.key, description: $0.value) }
+                    }
                 }
                 if let phoneListMode = json["phoneListMode"] as? String, let mode = PhoneListMode(rawValue: phoneListMode) {
                     self.phoneListMode = mode
                 }
-                if let phoneNumbers = json["phoneNumbers"] as? [String] { self.phoneNumbers = phoneNumbers }
+                if let phoneNumbers = json["phoneNumbers"] as? [String] {
+                    var seen = Set<String>()
+                    self.phoneNumbers = phoneNumbers.filter { seen.insert($0).inserted }
+                }
             }
         } catch {
-#if DEBUG
             print("Failed to load existing config.json: \(error)")
-#endif
         }
     }
 
-    private func loadRepliesIfExists() {
-        guard let url = repliesFileURL(), FileManager.default.fileExists(atPath: url.path) else { return }
+    private struct ParsedReplies {
+        let sender: String
+        let message: String
+        let replyValue: String
+        let timeValue: String
+        let repliesDict: [String: String]
+    }
+
+    private static func readRepliesFile(at url: URL) -> ParsedReplies? {
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
         do {
             let data = try Data(contentsOf: url)
-            if let anyJSON = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                // Extract fields with flexible typing
-                let sender = anyJSON["sender"] as? String ?? ""
-                let message = anyJSON["message"] as? String ?? ""
-                let replyValue: String = {
-                    if let s = anyJSON["Reply"] as? String { return s }
-                    if let s = anyJSON["reply"] as? String { return s }
-                    return ""
-                }()
-                let timeValue: String = {
-                    if let t = anyJSON["time"] as? String { return t }
-                    if let n = anyJSON["time"] as? NSNumber { return n.stringValue }
-                    if let i = anyJSON["time"] as? Int { return String(i) }
-                    if let d = anyJSON["time"] as? Double { return String(d) }
-                    return ""
-                }()
-                var repliesDict: [String: String] = [:]
-                // Collect top-level mood keys (e.g., "Loving", "Angry", etc.) into repliesDict
-                for (k, v) in anyJSON {
-                    if let text = v as? String, k != "sender", k != "message", k != "Reply", k != "reply", k != "time", k != "replies" {
-                        repliesDict[k] = text
-                    }
-                }
-                // Back-compat: if nested replies exists and has keys not present top-level, merge them in (but do not override top-level)
-                if let nested = anyJSON["replies"] as? [String: String] {
-                    for (k, v) in nested where repliesDict[k] == nil {
-                        repliesDict[k] = v
-                    }
-                }
-
-                DispatchQueue.main.async {
-                    self.lastSender = sender
-                    self.lastMessage = message
-                    self.lastReply = replyValue
-                    // replies.json is the source of truth: assign directly
-                    self.generatedReplies = repliesDict
-                    self.generationTimeSeconds = timeValue
-
-                    if self.lastReply.isEmpty {
-                        self.postEmptyReplyNotificationIfNeeded(sender: self.lastSender, message: self.lastMessage)
-                    } else {
-                        // Reset last-notified event when a non-empty reply appears so we can notify again on next empty event
-                        self.lastNotifiedEmptyReplyID = nil
-                    }
+            guard let anyJSON = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+            let sender = anyJSON["sender"] as? String ?? ""
+            let message = anyJSON["message"] as? String ?? ""
+            let replyValue: String = {
+                if let s = anyJSON["Reply"] as? String { return s }
+                if let s = anyJSON["reply"] as? String { return s }
+                return ""
+            }()
+            let timeValue: String = {
+                if let t = anyJSON["time"] as? String { return t }
+                if let n = anyJSON["time"] as? NSNumber { return n.stringValue }
+                if let i = anyJSON["time"] as? Int { return String(i) }
+                if let d = anyJSON["time"] as? Double { return String(d) }
+                return ""
+            }()
+            var repliesDict: [String: String] = [:]
+            for (k, v) in anyJSON {
+                if let text = v as? String, k != "sender", k != "message", k != "Reply", k != "reply", k != "time", k != "replies" {
+                    repliesDict[k] = text
                 }
             }
+            if let nested = anyJSON["replies"] as? [String: String] {
+                for (k, v) in nested where repliesDict[k] == nil {
+                    repliesDict[k] = v
+                }
+            }
+            return ParsedReplies(sender: sender, message: message, replyValue: replyValue, timeValue: timeValue, repliesDict: repliesDict)
         } catch {
-#if DEBUG
             print("Failed to load replies.json: \(error)")
-#endif
+            return nil
+        }
+    }
+
+    private func applyParsedReplies(_ parsed: ParsedReplies) {
+        self.lastSender = parsed.sender
+        self.lastMessage = parsed.message
+        self.lastReply = parsed.replyValue
+        self.generatedReplies = parsed.repliesDict
+        self.generationTimeSeconds = parsed.timeValue
+
+        if self.lastReply.isEmpty {
+            self.selectedReplyMood = nil
+            self.editingReplyMood = nil
+            self.draftReplyText = ""
+            self.postEmptyReplyNotificationIfNeeded(sender: self.lastSender, message: self.lastMessage)
+        } else {
+            self.lastNotifiedEmptyReplyID = nil
         }
     }
 
@@ -936,14 +931,15 @@ struct ContentView: View {
                 try writeAtomicallyReplacing(url: url, data: newData)
                 self.lastReply = mood
             } catch {
-#if DEBUG
                 print("Failed to save selected reply to replies.json: \(error)")
-#endif
             }
         }
     }
     
     private func saveRefreshRequest() {
+        selectedReplyMood = nil
+        editingReplyMood = nil
+        draftReplyText = ""
         guard let url = repliesFileURL() else { return }
         performRepliesWrite {
             do {
@@ -959,14 +955,15 @@ struct ContentView: View {
                 let newData = try JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted, .sortedKeys])
                 try writeAtomicallyReplacing(url: url, data: newData)
             } catch {
-#if DEBUG
                 print("Failed to save refresh request to replies.json: \(error)")
-#endif
             }
         }
     }
     
     private func saveIgnoreRequest() {
+        selectedReplyMood = nil
+        editingReplyMood = nil
+        draftReplyText = ""
         guard let url = repliesFileURL() else { return }
         performRepliesWrite {
             do {
@@ -982,9 +979,7 @@ struct ContentView: View {
                 let newData = try JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted, .sortedKeys])
                 try writeAtomicallyReplacing(url: url, data: newData)
             } catch {
-#if DEBUG
                 print("Failed to save ignore request to replies.json: \(error)")
-#endif
             }
         }
     }
@@ -1009,9 +1004,7 @@ struct ContentView: View {
                 let newData = try JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted, .sortedKeys])
                 try writeAtomicallyReplacing(url: url, data: newData)
             } catch {
-#if DEBUG
                 print("Failed to persist edited reply for \(mood): \(error)")
-#endif
             }
         }
     }
@@ -1019,16 +1012,31 @@ struct ContentView: View {
     private func writeAtomicallyReplacing(url: URL, data: Data) throws {
         let dir = url.deletingLastPathComponent()
         let tmpURL = dir.appendingPathComponent(UUID().uuidString + ".tmp")
-        try data.write(to: tmpURL, options: .atomic)
-        // Use FileManager replace to ensure atomicity and preserve file attributes when possible
-        _ = try FileManager.default.replaceItemAt(url, withItemAt: tmpURL, backupItemName: nil, options: .usingNewMetadataOnly)
+        try data.write(to: tmpURL)
+        if FileManager.default.fileExists(atPath: url.path) {
+            _ = try FileManager.default.replaceItemAt(url, withItemAt: tmpURL, backupItemName: nil, options: .usingNewMetadataOnly)
+        } else {
+            try FileManager.default.moveItem(at: tmpURL, to: url)
+        }
     }
+
+    private static let repliesIOQueue = DispatchQueue(label: "com.imessageai.repliesIO", qos: .utility)
 
     private func startRepliesPolling() {
         repliesPollTimer?.invalidate()
-        repliesPollTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-            self.loadRepliesIfExists()
+        let timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+            Self.repliesIOQueue.async {
+                ensureBaseDirectoryExists()
+                let url = fixedRepliesFileURL()
+                let maybeParsed = withFileLock(for: url, { Self.readRepliesFile(at: url) })
+                guard let parsed = maybeParsed else { return }
+                DispatchQueue.main.async {
+                    self.applyParsedReplies(parsed)
+                }
+            }
         }
+        RunLoop.current.add(timer, forMode: .common)
+        repliesPollTimer = timer
     }
 
     private func stopRepliesPolling() {
@@ -1048,25 +1056,20 @@ struct ContentView: View {
         guard let scriptURL = modelScriptURL() else { return }
         let fm = FileManager.default
         guard fm.fileExists(atPath: scriptURL.path) else {
-#if DEBUG
             print("model.py not found at: \(scriptURL.path)")
-#endif
             return
         }
         do {
             let process = Process()
             let pythonPath = resolvePythonPath() ?? "/usr/bin/python3"
-            let command = "\"\(pythonPath)\" -u \"\(scriptURL.path)\""
-            process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-            process.arguments = ["-lc", command]
+            process.executableURL = URL(fileURLWithPath: pythonPath)
+            process.arguments = ["-u", scriptURL.path]
             var env = ProcessInfo.processInfo.environment
             env["PYTHONUNBUFFERED"] = "1"
-            // Ensure sqlite3 and other tools are discoverable
             let user = NSUserName()
             let condaBin = "/Users/\(user)/miniconda3/bin"
             let homebrewBin = "/opt/homebrew/bin"
             let defaultPath = env["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
-            // Prepend preferred locations if not already present
             var pathParts = defaultPath.split(separator: ":").map(String.init)
             func prepend(_ p: String) { if !pathParts.contains(p) { pathParts.insert(p, at: 0) } }
             prepend(homebrewBin)
@@ -1097,7 +1100,6 @@ struct ContentView: View {
             }
 
             process.terminationHandler = { proc in
-// Removed debug print to avoid extra console noise
                 DispatchQueue.main.async {
                     stdoutHandle.readabilityHandler = nil
                     stderrHandle.readabilityHandler = nil
@@ -1118,9 +1120,7 @@ struct ContentView: View {
             print("Started model.py at: \(scriptURL.path)\n")
 #endif
         } catch {
-#if DEBUG
             print("Failed to start model.py: \(error)\n")
-#endif
         }
     }
 

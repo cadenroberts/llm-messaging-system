@@ -1,100 +1,109 @@
-# LLM Messaging System — Real-Time Local LLM Reply Generation
+# iMessageAI
 
-A macOS messaging system that monitors iMessage events (chat.db), generates mood-conditioned reply candidates using a local LLM (Ollama), and enables human-in-the-loop reply selection through AppleScript automation.
+Event-driven iMessage reply system for macOS. Watches the local `chat.db` SQLite store for incoming messages, generates mood-conditioned replies via a local Ollama LLM, presents candidates in a SwiftUI interface for human-in-the-loop selection, and sends the chosen reply through AppleScript automation.
 
-## System Overview
+## Files
 
-```text
-iMessage (chat.db)
-       ↓
-Event Listener (Python daemon)
-       ↓
-Local LLM (Ollama)
-       ↓
-Response Generation (structured JSON)
-       ↓
-User Selection (SwiftUI)
-       ↓
-AppleScript Automation → Messages.app
+| File | Role |
+|---|---|
+| `model.py` | Python daemon: polls `chat.db`, constructs personality prompts, calls Ollama, writes `replies.json`, sends via `osascript` |
+| `send_imessage.osa` | AppleScript: sends a message through Messages.app |
+| `config.json` | Personality config: name, description, moods, phone filter |
+| `requirements.txt` | Python dependencies (`ollama`) |
+| `iMessageAI/iMessageAIApp.swift` | SwiftUI `@main` entry; hosts `ContentView` in a `WindowGroup` |
+| `iMessageAI/ContentView.swift` | UI + process orchestration: config editing, `replies.json` polling, `model.py` lifecycle |
+| `iMessageAI/Assets.xcassets/` | App icons and accent color |
+| `iMessageAI.xcodeproj/` | Xcode project |
+| `test_model.py` | Unit tests: `validate_config`, `should_process`, `normalize_phone`, `atomic_write_json` |
+| `scripts/demo.sh` | Verification script: checks files, config, syntax, imports |
+| `scripts/open-product-bundle.sh` | Opens pre-built `.app` bundle if present |
+| `.github/workflows/ci.yml` | CI: installs deps, runs `demo.sh` and unit tests on `macos-latest` |
+
+## Entry Points
+
+| Entry Point | Language | Role |
+|---|---|---|
+| `iMessageAI/iMessageAIApp.swift` | Swift | `@main`; `WindowGroup` hosts `ContentView` |
+| `iMessageAI/ContentView.swift` | Swift | UI, config persistence, `model.py` process management, `replies.json` polling |
+| `model.py` | Python | Daemon: DB poll, LLM generation, IPC via `replies.json`, send via `osascript` |
+| `send_imessage.osa` | AppleScript | Sends iMessage given phone number and text |
+
+## Verification
+
+Smoke test (files, config, syntax, imports):
+
+```bash
+bash scripts/demo.sh
 ```
 
-## Key Challenges
+Pass when output contains `SMOKE_OK`.
 
-- Real-time processing of incoming messages without blocking UI
-- Ensuring consistent LLM output via structured JSON responses with retry logic
-- Handling variability in local model latency and output quality
-- Safely integrating automation with macOS messaging workflows
+Unit tests (requires `ollama` package):
 
-## Design Decisions
+```bash
+python3 -m unittest test_model -v
+```
 
-- **Local LLM (Ollama)** over cloud API: privacy and no API cost; tradeoff: hardware requirements
-- **File-based IPC** over sockets: zero-dependency cross-language communication; tradeoff: no locking, potential races
-- **Structured outputs (JSON)** enforced with retry loop for predictable response parsing
-- **Human-in-the-loop selection** to ensure correctness before send
-- **`sqlite3` CLI** over Python `sqlite3` module: fewer lock issues with Messages holding `chat.db`
+Tests cover `validate_config`, `should_process`, `normalize_phone`, `atomic_write_json`.
 
-## Tradeoffs
+Xcode build:
 
-- Local models → better privacy but lower model quality vs cloud APIs
-- Structured outputs → reliability but reduced generation flexibility
-- Automation → convenience but requires careful system integration
-- File-based IPC → simplicity but no concurrency guarantees
+```bash
+xcodebuild -project iMessageAI.xcodeproj -scheme iMessageAI -configuration Debug build 2>&1 | tail -5
+```
+
+Full end-to-end requires macOS with Full Disk Access, Ollama with `llama3.1:8b`, signed-in Messages, and a real incoming iMessage.
 
 ## Architecture
 
-```
-┌──────────────┐     ┌──────────────────┐     ┌───────────────┐
-│  chat.db     │────▶│   model.py       │────▶│  replies.json │
-│  (SQLite)    │     │  (Python daemon) │     │  (IPC buffer) │
-│  iMessage DB │     │  - DB polling    │     └───────┬───────┘
-└──────────────┘     │  - System prompt │             │
-                     │  - LLM inference │             ▼
-                     │  - JSON parsing  │     ┌───────────────┐
-                     └──────────────────┘     │  SwiftUI host │
-                                              │  - Reply list │
-                     ┌──────────────────┐     │  - Config UI  │
-                     │  config.json     │     └───────┬───────┘
-                     │  - Name          │             │
-                     │  - Personality   │             ▼
-                     │  - Mood system   │     ┌──────────────────┐
-                     │  - Phone filter  │     │ AppleScript send │
-                     └──────────────────┘     └──────────────────┘
+```mermaid
+flowchart LR
+    chatDB["chat.db (SQLite)"] -->|"sqlite3 CLI poll"| modelPy["model.py"]
+    configJSON["config.json"] -->|"read each cycle"| modelPy
+    modelPy -->|"ollama.chat LLM"| repliesJSON["replies.json"]
+    repliesJSON <-->|"1s poll + atomic write"| swiftUI["SwiftUI ContentView"]
+    swiftUI -->|"persistConfig"| configJSON
+    swiftUI -->|"Process launch"| modelPy
+    modelPy -->|"osascript"| osa["send_imessage.osa"]
+    osa -->|"Messages.app"| send["iMessage sent"]
 ```
 
-## Constraints
+### Execution flow
 
-- macOS sandboxing and Messages DB access limitations (requires Full Disk Access)
-- AppleScript latency and reliability issues (fragile string interpolation, silent failures)
-- Local LLM inference latency (~6.5s) vs real-time responsiveness expectations
-- No file locking on IPC buffer (`replies.json`) — races possible under concurrent access
+1. SwiftUI host launches `model.py` as a child process (auto-restart on exit)
+2. `model.py` polls `chat.db` via `sqlite3` CLI for the latest message ROWID
+3. On new message from an allowed phone number: reads `config.json`, builds personality prompt with mood definitions
+4. Ollama generates JSON with one reply per mood (retries up to 5 times on key mismatch)
+5. `model.py` atomically writes the reply map to `replies.json`
+6. SwiftUI polls `replies.json` every 1s and displays mood-labeled reply cards
+7. User selects a card, edits text if needed, then taps Reply / Refresh / Ignore
+8. `model.py` reads the selection and invokes `send_imessage.osa` via `osascript`
 
-## Results
+### IPC contracts
 
-- Reply generation in ~6.5s per cycle on Apple Silicon (Llama 3.1 8B, local inference)
-- Structured JSON output compliance achieved with ≤1 retry in typical operation
-- End-to-end pipeline from message detection to send confirmation under 10 seconds
-- Zero external API dependencies — all inference and data stays on-device
+- **model.py -> replies.json:** flat JSON with mood keys plus `Reply`, `sender`, `message`, `time`
+- **SwiftUI -> replies.json:** writes `Reply` key (`""` = waiting, `"Refresh"` = regenerate, `"Ignore"` = skip, mood name = send)
+- **SwiftUI -> config.json:** atomic write of name, description, moods, phone filter
+- **model.py -> send_imessage.osa:** `subprocess.run(['osascript', 'send_imessage.osa', number, text])`
+
+## Prerequisites
+
+- macOS with Full Disk Access granted to Terminal/Xcode
+- Xcode installed
+- Ollama installed and running (`brew install ollama && ollama serve`)
+- Llama 3.1 8B pulled (`ollama pull llama3.1:8b`)
+- Python 3.9+ with `ollama` package (`pip install -r requirements.txt`)
+- Messages signed into iMessage
 
 ## Quick Start
 
 ```bash
-brew install ollama
-ollama pull llama3.1:8b
-pip install ollama
-
 git clone git@github.com:cadenroberts/llm-messaging-system.git
 cd llm-messaging-system
-open iMessageAI.xcodeproj
-# Product > Run (Cmd+R)
+pip install -r requirements.txt
+mkdir -p ~/iMessageAI
+cp model.py config.json send_imessage.osa ~/iMessageAI/
+open iMessageAI.xcodeproj  # Product > Run (Cmd+R)
 ```
 
-Requires macOS 13+, Xcode 15+, Full Disk Access granted to Terminal, and Messages signed in.
-
-## Performance
-
-| Metric | Target | Measured |
-|---|---|---|
-| Reply generation | < 15s per cycle | ~6.5s (Apple Silicon, Llama 3.1 8B) |
-| Config parse | < 10ms | Negligible |
-| UI poll | 1s | 1s fixed |
-| Retry worst case | 5 × ~6.5s | Rare; usually 0–1 retries |
+Alternatively, if a pre-built bundle exists: `./scripts/open-product-bundle.sh`

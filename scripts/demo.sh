@@ -3,6 +3,8 @@ set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
+HAS_WARNINGS=false
+
 echo "=== iMessageAI Verification ==="
 echo "Repo: $REPO_DIR"
 echo ""
@@ -83,6 +85,7 @@ if python3 -c "import ollama; print('  IMPORT_OK')" 2>/dev/null; then
   true
 else
   echo "  WARN: ollama package not installed (pip install ollama)"
+  HAS_WARNINGS=true
 fi
 echo ""
 
@@ -94,11 +97,12 @@ if command -v swiftc >/dev/null 2>&1; then
   # Parse-only check for each Swift file
   SWIFT_OK=true
   for sf in "$REPO_DIR"/iMessageAI/*.swift; do
-    if swiftc -parse "$sf" 2>/dev/null; then
+    if swiftc -parse "$sf" >/dev/null 2>&1; then
       echo "  OK: $(basename "$sf")"
     else
-      echo "  WARN: $(basename "$sf") has parse issues (may need framework imports)"
+      echo "  FAIL: $(basename "$sf") has parse issues (may need framework imports)"
       SWIFT_OK=false
+      HAS_WARNINGS=true
     fi
   done
   if $SWIFT_OK; then
@@ -106,6 +110,7 @@ if command -v swiftc >/dev/null 2>&1; then
   fi
 else
   echo "  WARN: swiftc not found, skipping Swift syntax check"
+  HAS_WARNINGS=true
 fi
 echo ""
 
@@ -114,13 +119,15 @@ echo ""
 # -----------------------------------------------
 echo "[CHECK] AppleScript syntax..."
 if command -v osacompile >/dev/null 2>&1; then
-  if osacompile -o /dev/null "$REPO_DIR/send_imessage.osa" 2>/dev/null; then
+  if osacompile -o /dev/null "$REPO_DIR/send_imessage.osa" >/dev/null 2>&1; then
     echo "  APPLESCRIPT_OK"
   else
-    echo "  WARN: AppleScript compilation issue"
+    echo "  FAIL: AppleScript compilation issue"
+    HAS_WARNINGS=true
   fi
 else
   echo "  WARN: osacompile not found, skipping"
+  HAS_WARNINGS=true
 fi
 echo ""
 
@@ -137,5 +144,10 @@ else
 fi
 echo ""
 
-echo "=== All checks passed ==="
-echo "SMOKE_OK"
+if $HAS_WARNINGS; then
+  echo "=== Checks completed with warnings ==="
+  echo "SMOKE_OK (warnings)"
+else
+  echo "=== All checks passed ==="
+  echo "SMOKE_OK"
+fi

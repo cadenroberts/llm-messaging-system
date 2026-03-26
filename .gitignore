@@ -7,5 +7,7 @@ node_modules/
 *.xcuserstate
 xcuserdata/
 replies.json
+replies.json.lock
+iMessageAI.app
 *.mp4
 *.pdf
