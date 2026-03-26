@@ -20,11 +20,33 @@ jobs:
       - name: Install Python dependencies
         run: pip install -r requirements.txt
 
+      - name: Install Ollama and pull model
+        run: |
+          brew install ollama
+          ollama serve &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:11434/api/tags >/dev/null 2>&1 && break
+            sleep 1
+          done
+          ollama pull llama3.1:8b
+
+      - name: Grant Full Disk Access
+        run: |
+          sudo tccutil reset SystemPolicyAllFiles 2>/dev/null || true
+          sudo sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" \
+            "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version) \
+             VALUES ('kTCCServiceSystemPolicyAllFiles', '/usr/bin/python3', 1, 2, 4, 1);" 2>/dev/null || true
+
       - name: Run verification
         run: bash scripts/demo.sh
 
       - name: Run unit tests
         run: python3 -m unittest test_model -v
+
+      - name: Run live Ollama integration test
+        env:
+          CI_LIVE_OLLAMA: "1"
+        run: python3 -m unittest test_model.TestLiveOllama -v
 
       - name: Xcode build and test
         run: xcodebuild test -project iMessageAI.xcodeproj -scheme iMessageAI -configuration Debug -destination 'platform=macOS'

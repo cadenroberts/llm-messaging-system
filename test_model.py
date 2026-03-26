@@ -371,6 +371,21 @@ class TestSQLIntegration(unittest.TestCase):
         self.assertEqual(rowids, sorted(rowids))
 
 
+@unittest.skipUnless(
+    os.environ.get('CI_LIVE_OLLAMA'),
+    'requires running Ollama with llama3.1:8b (set CI_LIVE_OLLAMA=1)',
+)
+class TestLiveOllama(unittest.TestCase):
+
+    def test_gen_replies_returns_correct_keys(self):
+        result = gen_replies(VALID_CONFIG, 'Hello, how are you?')
+        self.assertIsInstance(result, dict)
+        self.assertEqual(sorted(result.keys()), sorted(VALID_CONFIG['moods'].keys()))
+        for v in result.values():
+            self.assertIsInstance(v, str)
+            self.assertTrue(len(v) > 0, 'reply should not be empty')
+
+
 class TestSafeRowid(unittest.TestCase):
     def test_valid_integer(self):
         self.assertEqual(_safe_rowid('12345'), '12345')
