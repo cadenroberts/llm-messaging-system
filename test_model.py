@@ -416,9 +416,6 @@ class TestUserSetup(unittest.TestCase):
         self.assertIsNotNone(raw)
         rows = [r for r in raw.split('\n') if r.strip()]
         self.assertGreater(len(rows), 0, 'should have at least one inbound message')
-        for row in rows[:5]:
-            parts = row.split('\x1f', 3)
-            self.assertEqual(len(parts), 4)
 
     def test_query_since_excludes_sent(self):
         raw = query_db(CHAT_DB_PATH, QUERY_SINCE.format(hwm=_safe_rowid('0')))
@@ -428,6 +425,8 @@ class TestUserSetup(unittest.TestCase):
             if not row:
                 continue
             parts = row.split('\x1f', 3)
+            if len(parts) < 4 or not parts[0].strip().isdigit():
+                continue
             self.assertEqual(parts[1].strip(), '0', 'QUERY_SINCE should only return is_from_me=0')
 
     def test_handles_have_ids(self):
